@@ -60,7 +60,10 @@ jobs:
 
       - name: Build SiWx917 Lighting App
         run: |
-          west build -b siwx917_rb4338a -p always examples/lighting-app/silabs/zephyr
+          cd /opt/silabs/zephyr \
+          && curl -L https://github.com/zephyrproject-rtos/zephyr/commit/b4c86826ca75d99f78eb8f0e5718653bf85db35d.patch | git apply \
+          && cd ../zephyr-silabs \
+          && west build -b siwx917_rb4338a -p always ../connectedhomeip/examples/lighting-app/silabs/zephyr
 # copy artifacts
 
       - name: Clean out build output

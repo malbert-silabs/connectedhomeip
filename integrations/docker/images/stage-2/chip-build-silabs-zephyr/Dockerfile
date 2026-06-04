@@ -1,26 +1,28 @@
 ARG VERSION=1
-FROM ghcr.io/project-chip/chip-build:${VERSION} AS build
+FROM ghcr.io/project-chip/chip-build:194 AS build
 LABEL org.opencontainers.image.source=https://github.com/project-chip/connectedhomeip
 
 WORKDIR /opt/silabs/
 
 RUN set -x \
     && ZEPHYR_SDK_VERSION=0.17.2 \
-    && ZEPHYR_SILABS_HASH=c89815d6d6ba24ce5e4fdf3956c9523d995131ab \
+    && ZEPHYR_SILABS_HASH=88d26fa03e5e4748b5a14ef509889aaf16bb03f9 \
     && python3 -m venv venv \
     && . venv/bin/activate \
-    && pip3 install west requests \
-    && git clone https://github.com/SiliconLabsSoftware/zephyr-silabs.git \
-    && cd zephyr-silabs \
-    && git checkout ${ZEPHYR_SILABS_HASH} \
+    # requests and jsonschema required for west blobs fetch
+    && pip3 install west requests jsonschema \
     # Initialize west with the specific commit of the zephyr-silabs repository
     # This commit corresponds to the version of the Zephyr SDK used in the project
+    # && cd ../ \
+    && west init -m https://github.com/SiliconLabsSoftware/zephyr-silabs  \
+    # && ls \
+    # && cd zephyrproject \
+    # temp
+    && cd zephyr-silabs \
+    && git checkout ${ZEPHYR_SILABS_HASH} \
     && cd ../ \
-    && west init -l ./zephyr-silabs  \
     # 
     # && cd zephyr \
-    # && git checkout b333d1f4cc6b96d053b425e07148661cf25778d8 \
-    # && cd ../ \
     #
     && west update \
     && west blobs fetch \
@@ -35,7 +37,7 @@ RUN set -x \
     && west zephyr-export \
     && : # last line
 
-FROM ghcr.io/project-chip/chip-build:${VERSION}
+FROM ghcr.io/project-chip/chip-build:194
 
 COPY --from=build /opt/silabs/ /opt/silabs/
 
