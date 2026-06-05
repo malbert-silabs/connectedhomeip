@@ -15,7 +15,6 @@
 name: Build example - Zephyr
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - master
@@ -34,17 +33,11 @@ jobs:
   silabs:
     name: Zephyr Silabs
 
-    env:
-      #SILABS_BOARD: BRD4338A
-      BUILD_TYPE: gn_efr32
-
     runs-on: ubuntu-latest
     if: github.actor != 'restyled-io[bot]'
 
     container:
-      image: ghcr.io/malbert-silabs/chip-build-silabs-zephyr-local:1
-      volumes:
-        - "/tmp/bloat_reports:/tmp/bloat_reports"
+      image: ghcr.io/malbert-silabs/chip-build-silabs-zephyr:194
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -52,12 +45,6 @@ jobs:
         uses: ./.github/actions/checkout-submodules-and-bootstrap
         with:
           platform: silabs_docker
-
-      - name: Set up environment for size reports
-        uses: ./.github/actions/setup-size-reports
-        if: ${{ !env.ACT }}
-        with:
-          gh-context: ${{ toJson(github) }}
 
       - name: Build SiWx917 Lighting App
         run: |
@@ -69,20 +56,8 @@ jobs:
           && cd ../zephyr-silabs \
           && west build -b siwx917_rb4338a -p always "${GITHUB_WORKSPACE}/examples/lighting-app/silabs/zephyr"
 
-      - name: Prepare bloat report for SiWx917 lighting app
-        run: |
-          .environment/pigweed-venv/bin/python3 scripts/tools/memory/gh_sizes.py \
-            efr32 siwx917_rb4338a lighting-app \
-            /opt/silabs/zephyr-silabs/build/zephyr/zephyr.elf \
-            /tmp/bloat_reports/
-
       - name: Clean out build output
         run: rm -rf ./out
-      - name: Uploading Size Reports
-        uses: ./.github/actions/upload-size-reports
-        if: ${{ !env.ACT }}
-        with:
-          platform-name: EFR32
       # - name: Notify Slack on Failure
       #   if: failure()
       #   uses: ./.github/actions/notify-slack-failure

@@ -1,11 +1,11 @@
 ARG VERSION=1
-FROM ghcr.io/project-chip/chip-build:194 AS build
+FROM ghcr.io/project-chip/chip-build:${VERSION} AS build
 LABEL org.opencontainers.image.source=https://github.com/project-chip/connectedhomeip
 
 WORKDIR /opt/silabs/
 
 RUN set -x \
-    && ZEPHYR_SDK_VERSION=0.17.2 \
+    && ZEPHYR_SDK_VERSION=1.0.1 \
     && ZEPHYR_SILABS_HASH=88d26fa03e5e4748b5a14ef509889aaf16bb03f9 \
     && python3 -m venv venv \
     && . venv/bin/activate \
@@ -13,17 +13,10 @@ RUN set -x \
     && pip3 install west requests jsonschema \
     # Initialize west with the specific commit of the zephyr-silabs repository
     # This commit corresponds to the version of the Zephyr SDK used in the project
-    # && cd ../ \
     && west init -m https://github.com/SiliconLabsSoftware/zephyr-silabs  \
-    # && ls \
-    # && cd zephyrproject \
-    # temp
     && cd zephyr-silabs \
     && git checkout ${ZEPHYR_SILABS_HASH} \
     && cd ../ \
-    # 
-    # && cd zephyr \
-    #
     && west update \
     && west blobs fetch \
     && mkdir -p /opt/silabs/sdk \
@@ -37,7 +30,7 @@ RUN set -x \
     && west zephyr-export \
     && : # last line
 
-FROM ghcr.io/project-chip/chip-build:194
+FROM ghcr.io/project-chip/chip-build:${VERSION}
 
 COPY --from=build /opt/silabs/ /opt/silabs/
 
