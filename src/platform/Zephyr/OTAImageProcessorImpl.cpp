@@ -23,11 +23,33 @@
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/version.h>
 
 #ifdef CONFIG_CHIP_OTA_REQUEST_UPGRADE_PERMANENT
 #define UPDATE_TYPE BOOT_UPGRADE_PERMANENT
 #else
 #define UPDATE_TYPE BOOT_UPGRADE_TEST
+#endif
+
+// The FIXED_PARTITION_OFFSET()/FIXED_PARTITION_SIZE()/FIXED_PARTITION_DEVICE()
+// macros were renamed to PARTITION_OFFSET()/PARTITION_SIZE()/PARTITION_DEVICE()
+// and marked deprecated in Zephyr 4.4. Gate on the Zephyr version so the code
+// builds warning-free on the latest Zephyr while keeping the original macros for
+// older revisions still used by other vendors (e.g. NXP).
+//
+// OTA_IMAGE_SLOT_DEVICE resolves the flash device that actually owns
+// slot1_partition rather than assuming the chosen zephyr,flash-controller. This
+// is required when the secondary slot lives on a different device than the
+// primary (e.g. an external SPI NOR), and is a no-op when both slots share the
+// same controller.
+#if ZEPHYR_VERSION_CODE >= ZEPHYR_VERSION(4, 4, 0)
+#define OTA_IMAGE_SLOT_OFFSET PARTITION_OFFSET(slot1_partition)
+#define OTA_IMAGE_SLOT_SIZE PARTITION_SIZE(slot1_partition)
+#define OTA_IMAGE_SLOT_DEVICE PARTITION_DEVICE(slot1_partition)
+#else
+#define OTA_IMAGE_SLOT_OFFSET FIXED_PARTITION_OFFSET(slot1_partition)
+#define OTA_IMAGE_SLOT_SIZE FIXED_PARTITION_SIZE(slot1_partition)
+#define OTA_IMAGE_SLOT_DEVICE FIXED_PARTITION_DEVICE(slot1_partition)
 #endif
 
 static chip::OTAImageProcessorImpl gImageProcessor;
@@ -60,15 +82,18 @@ CHIP_ERROR OTAImageProcessorImpl::PrepareDownloadImpl()
 
     const struct device * flash_dev;
 
-    flash_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_flash_controller));
-    if (flash_dev == NULL)
+    // Use the flash device that owns the secondary slot (slot1_partition). This
+    // may differ from the chosen zephyr,flash-controller when the secondary slot
+    // is on an external flash (e.g. SPI NOR).
+    flash_dev = OTA_IMAGE_SLOT_DEVICE;
+    if (!device_is_ready(flash_dev))
     {
-        ChipLogError(SoftwareUpdate, "Failed to get flash device");
+        ChipLogError(SoftwareUpdate, "OTA secondary slot flash device not ready");
         return System::MapErrorZephyr(-EFAULT);
     }
 
-    int err = stream_flash_init(&mStream, flash_dev, mBuffer, sizeof(mBuffer), FIXED_PARTITION_OFFSET(slot1_partition),
-                                FIXED_PARTITION_SIZE(slot1_partition), NULL);
+    int err = stream_flash_init(&mStream, flash_dev, mBuffer, sizeof(mBuffer), OTA_IMAGE_SLOT_OFFSET, OTA_IMAGE_SLOT_SIZE,
+                                NULL);
 
     if (err)
     {

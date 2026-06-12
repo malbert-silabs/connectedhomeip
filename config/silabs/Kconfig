@@ -28,9 +28,11 @@ config CHIP_DEVICE_VENDOR_NAME
 config CHIP_OTA_REQUESTOR
 	bool "Enable OTA Requestor"
 	default n
-	imply DFU_MULTI_IMAGE
-	imply DFU_TARGET
-	#imply BOOTLOADER_MCUBOOT # TODO MATTER-4888
+	# The generic Zephyr OTA image processor (src/platform/Zephyr/OTAImageProcessorImpl)
+	# performs single-application-image OTA: it streams the downloaded image into the
+	# MCUboot secondary slot and requests a swap. It does not use the multi-image DFU
+	# subsystem (DFU_MULTI_IMAGE / DFU_TARGET).
+	imply BOOTLOADER_MCUBOOT
 	imply IMG_MANAGER
 	imply STREAM_FLASH
 	imply STREAM_FLASH_ERASE
@@ -39,7 +41,6 @@ config CHIP_OTA_IMAGE_BUILD
 	bool
 	default y if CHIP_OTA_REQUESTOR
 	depends on SIGN_IMAGES
-	select DFU_MULTI_IMAGE_PACKAGE_BUILD
 
 config CHIP_LOG_VERIFY_OR_DIE
 	bool "Log source code location on VerifyOrDie failure"
@@ -477,12 +478,15 @@ config BT_GATT_CACHING
 config BOOT_IMAGE_ACCESS_HOOKS
     default n 
 
+# Matter performs single-application-image OTA, so MCUboot manages a single
+# updateable image (two slots: slot0/slot1). A value of 2 would make MCUboot
+# expect slot2/slot3 partitions, which are not defined in the device tree.
 config UPDATEABLE_IMAGE_NUMBER
-    default 2 
+    default 1
 
 config DFU_MULTI_IMAGE_MAX_IMAGE_COUNT
     int "Maximum number of images for multi-image DFU"
-    default 2
+    default 1
 
 # ==============================================================================
 # OpenThread configuration
