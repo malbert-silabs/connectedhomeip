@@ -27,39 +27,6 @@
     };
 };
 
-/*
- * INTERIM MCUboot OTA layout for the EFR32MG24 (BRD4187C).
- *
- * The MCUboot secondary slot (slot1) is placed on the onboard MX25R external
- * SPI NOR flash and holds the full *uncompressed* update image. MCUboot then
- * installs it into the internal primary slot (slot0) in overwrite-only mode
- * (CONFIG_BOOT_UPGRADE_ONLY=y in config/silabs/app/bootloader.conf).
- *
- * This is a temporary arrangement so OTA can be exercised end-to-end before the
- * Silabs MCUboot fork gains an LZMA decompression engine. Once that lands, move
- * slot1 back to internal flash as a smaller *compressed* secondary (add
- * CONFIG_BOOT_DECOMPRESSION=y and sign with --compression lzma2armthumb) and
- * drop the external SPI dependency. See README.md.
- *
- * MCUboot requires the primary and secondary slots to be sector-compatible,
- * which in practice means they must be the SAME SIZE (MCUboot walks both slots
- * in lockstep and rejects mismatched totals with "slots have non-compatible
- * sectors"). The external MX25R caps the secondary at 1 MiB, so slot0 is also
- * 1024 kB. The 8 kB internal page vs 4 kB external sector difference is fine
- * (8 is a multiple of 4). The app must therefore stay under ~1 MiB.
- *
- * Internal flash (1536 kB):
- *   mcuboot   0x000000 .. 0x00c000   (48 kB,   boot_partition)
- *   slot0     0x00c000 .. 0x10c000   (1024 kB, primary, full uncompressed app)
- *   (unused)  0x10c000 .. 0x15c000   (320 kB)
- *   factory   0x15c000 .. 0x164000   (32 kB)
- *   settings  0x164000 .. 0x16c000   (32 kB)
- *   (unused)  0x16c000 .. 0x178000   (48 kB)
- *   storage   0x178000 .. 0x180000   (32 kB, board default, unchanged)
- *
- * External MX25R SPI NOR:
- *   slot1     0x000000 .. 0x100000   (1024 kB, secondary, must equal slot0)
- */
 &slot0_partition {
     reg = <0x0000c000 DT_SIZE_K(1024)>;
 };
