@@ -58,9 +58,7 @@ CHIP_ERROR OTAImageProcessorImpl::PrepareDownloadImpl()
     mHeaderParser.Init();
     mParams = {};
 
-    const struct device * flash_dev;
-
-    flash_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_flash_controller));
+    const struct device * flash_dev = PARTITION_DEVICE(slot1_partition);
     if (flash_dev == NULL)
     {
         ChipLogError(SoftwareUpdate, "Failed to get flash device");

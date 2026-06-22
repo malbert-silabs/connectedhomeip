@@ -269,146 +269,84 @@ CONFIG_NVS_LOOKUP_CACHE_SIZE=1024
 
 ## OTA Software Update
 
-This example supports Over-The-Air (OTA) software updates using the generic
-Zephyr OTA path (`src/platform/Zephyr/OTAImageProcessorImpl`) together with
-MCUboot. The downloaded image is streamed into the MCUboot secondary slot
-(`slot1_partition`) and MCUboot installs it on the next boot. This is the
-portable Zephyr mechanism, distinct from the Gecko Bootloader / GBL flow used by
-the Silabs FreeRTOS examples.
+This example supports Matter Over-The-Air (OTA) software updates via the generic
+Zephyr image processor (`src/platform/Zephyr/OTAImageProcessorImpl`) and MCUboot.
+The downloaded image is streamed into the MCUboot secondary slot
+(`slot1_partition`) and installed on the next reboot (overwrite-only). This is
+the portable Zephyr mechanism, distinct from the Gecko Bootloader / GBL flow used
+by the Silabs FreeRTOS examples.
 
-> **Interim layout — external SPI NOR secondary.** Two full uncompressed copies
-> of the firmware do not fit in the EFR32MG24's 1536 kB internal flash. The
-> Silabs MCUboot fork advertises the image-compression Kconfig flags but does
-> **not** yet ship an LZMA decompression engine, so a compressed internal
-> secondary is not usable today. As a temporary measure on `xg24_rb4187c` the
-> secondary slot is placed on the onboard **MX25R external SPI NOR** and MCUboot
-> installs it into the internal primary slot in **overwrite-only** mode. Once
-> the Silabs MCUboot fork gains an LZMA decoder, the secondary moves back
-> internal as a smaller compressed slot — see
-> [Reverting to a compressed internal secondary](#reverting-to-a-compressed-internal-secondary).
+Enabling `CONFIG_CHIP_OTA_REQUESTOR` implies `CONFIG_BOOTLOADER_MCUBOOT` and uses
+a single application image (`CONFIG_UPDATEABLE_IMAGE_NUMBER=1`). The image
+processor resolves the flash device from `slot1_partition` itself, so the
+secondary slot can live wherever a board has room:
 
-### How it works
+-   `xg24_rb4187c`: the onboard **MX25R external SPI NOR**. Two full images do
+    not fit in the EFR32MG24's 1536 kB internal flash, and the Silabs MCUboot
+    fork has no LZMA decompressor yet, so the secondary is external and MCUboot
+    overwrite-copies it into the internal primary. The board's `.conf` enables
+    the SPI NOR drivers; primary and secondary are both 1024 kB (MCUboot requires
+    equal-sized slots), so the signed app must stay under 1024 kB.
+-   `xg26_rb4118a`: internal flash.
 
--   Enabling `CONFIG_CHIP_OTA_REQUESTOR` implies `CONFIG_BOOTLOADER_MCUBOOT` and
-    sets `CONFIG_UPDATEABLE_IMAGE_NUMBER=1` (single-application-image OTA). The
-    application is linked into the MCUboot primary slot (`slot0_partition`).
--   The board overlay (`boards/xg24_rb4187c.overlay`) deletes the internal
-    `slot1_partition` and recreates it on `&mx25r80` (the MX25R SPI NOR), sized
-    for a full uncompressed image. MCUboot requires the primary and secondary
-    slots to be the same size (it rejects mismatched slots with "slots have
-    non-compatible sectors"), and the MX25R caps the secondary at 1 MiB, so both
-    `slot0` and `slot1` are **1024 kB**. The signed application must stay under
-    1024 kB (~978 kB today). The 8 kB internal page vs 4 kB external sector
-    difference is fine because 8 is a multiple of 4.
--   `boards/xg24_rb4187c_ota.conf` enables the SPI stack (`CONFIG_SPI`,
-    `CONFIG_SPI_SILABS_EUSART`, `CONFIG_SPI_NOR`) so the application can stream
-    the download into the external NOR, and `config/silabs/app/bootloader.conf`
-    enables the same drivers plus `CONFIG_BOOT_UPGRADE_ONLY=y` so MCUboot can
-    read the external secondary and overwrite-copy it into the internal primary.
--   The image processor resolves the secondary slot's flash device from
-    `slot1_partition` itself (`PARTITION_DEVICE`), so it writes to the external
-    NOR here and to internal flash in the future compressed layout with no code
-    change.
--   The application image is signed with the MCUboot ECDSA P256 development key
-    (`CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`); the bootloader is built for the
-    matching `CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256`. Replace the development key
-    with a private key for production.
--   `bootloader.conf` sets `CONFIG_BOOT_BUILTIN_KEY=n`. With the Silabs HSE PSA
-    driver enabled MCUboot otherwise defaults to a *built-in* key
-    (`default y if PSA_CRYPTO_DRIVER_SILABS_HSE`) and verifies against a key that
-    must first be provisioned into Secure Vault under
-    `CONFIG_BOOT_BUILTIN_KEY_ID` (0x7fff0001) — not the key from
-    `CONFIG_BOOT_SIGNATURE_KEY_FILE`. Without provisioning, every image is
-    rejected with `Image in the primary slot is not valid!`. Disabling it embeds
-    the public key in the bootloader so validation matches the signing key with
-    no extra provisioning. Production devices should provision the key hash into
-    Secure Vault and remove this override.
--   The build produces `matter.ota` (the Matter OTA image, uncompressed) and
-    `zephyr_full.bin` (MCUboot + signed application merged for initial flashing)
-    via `config/silabs/app/zephyr-post-build.cmake`.
+The app is signed with the MCUboot ECDSA-P256 development key
+(`CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`, set in `config/silabs/Kconfig`); replace it
+with a private key for production. `config/silabs/app/bootloader.conf` sets
+`CONFIG_BOOT_BUILTIN_KEY=n` so the public key is embedded in the bootloader;
+otherwise the Silabs HSE PSA driver defaults to a built-in key that must first be
+provisioned into Secure Vault, and every image is rejected with `Image in the
+primary slot is not valid!`.
 
-```
-Internal flash (1536 kB)            External MX25R SPI NOR
-  mcuboot   0x000000  48 kB           slot1   0x000000  1024 kB (uncompressed)
-  slot0     0x00c000  1024 kB
-  (unused)  0x10c000  320 kB
-  factory   0x15c000  32 kB
-  settings  0x164000  32 kB
-  storage   0x178000  32 kB
-```
-
-### Building with OTA support
+### Build
 
 ```bash
-west build -b xg24_rb4187c -p always connectedhomeip/examples/lighting-app/silabs/zephyr \
-    -- -DFILE_SUFFIX=ota
+west build -b xg24_rb4187c -p always examples/lighting-app/silabs/zephyr \
+    -- -DCONFIG_CHIP_OTA_REQUESTOR=y -DCONFIG_CHIP_OTA_IMAGE_BUILD=y
 ```
-
-`-DFILE_SUFFIX=ota` selects `prj_ota.conf` (board-agnostic OTA options) and, for
-this board only, auto-merges `boards/xg24_rb4187c_ota.conf` (the external-SPI
-drivers and overwrite-only padding that the layout above requires). Other boards
-have no `_ota` fragment, so those settings stay out of their OTA builds.
 
 Build the **update** image with a higher software version so the provider offers
 it as newer:
 
 ```bash
-west build -b xg24_rb4187c -p always connectedhomeip/examples/lighting-app/silabs/zephyr \
-    -- -DFILE_SUFFIX=ota \
+west build -b xg24_rb4187c -p always examples/lighting-app/silabs/zephyr \
+    -- -DCONFIG_CHIP_OTA_REQUESTOR=y -DCONFIG_CHIP_OTA_IMAGE_BUILD=y \
        -DCONFIG_CHIP_DEVICE_SOFTWARE_VERSION=2 \
        -DCONFIG_CHIP_DEVICE_SOFTWARE_VERSION_STRING=\"2.0\"
 ```
 
-Build outputs (in `build/zephyr/`):
+Outputs in `build/zephyr/` (produced by `config/silabs/app/zephyr-post-build.cmake`):
 
 -   `zephyr_full.bin` — MCUboot + signed application; flash this for the initial
     (factory) image.
--   `matter.ota` — the OTA image to serve from a Matter OTA Provider.
+-   `matter.ota` — the image to serve from a Matter OTA Provider.
 
-### Running an update
+### Flash the base image
 
-1.  Flash the base (v1) `zephyr_full.bin` and commission the device. Confirm the
-    MX25R SPI NOR is detected at boot (the `spi_nor` driver logs its JEDEC ID;
-    with logging enabled you should see the device initialize).
-2.  Start an OTA Provider with the candidate (v2) image:
+```bash
+commander flash ./build/zephyr/zephyr_full.bin --address 0x8000000
+```
+
+### Run an update
+
+1.  Flash the base (v1) image and commission the device.
+2.  Serve the candidate (v2) image:
 
     ```bash
     ./chip-ota-provider-app --filepath build/zephyr/matter.ota
     ```
 
-3.  Commission the provider and announce it to the device with `chip-tool`:
+3.  Announce the provider to the device with `chip-tool`:
 
     ```bash
     chip-tool pairing onnetwork 1 20202021
     chip-tool otasoftwareupdaterequestor announce-otaprovider 1 0 0 0 <requestor-node-id> 0
     ```
 
-4.  Expected flow: the BDX download streams into the external NOR
-    (`slot1_partition`); `boot_request_upgrade()` schedules the install; the
-    device reboots; MCUboot overwrite-copies the image from the external NOR into
-    the internal `slot0`; the v2 image runs and confirms itself via
-    `boot_write_img_confirmed()`.
-
-Refer to the
+The image downloads into `slot1_partition`, `boot_request_upgrade()` schedules
+the install, the device reboots, MCUboot installs the v2 image, and it confirms
+itself via `boot_write_img_confirmed()`. See the
 [Matter OTA guide](../../../../docs/guides/ota_software_update.md) for full
-details on setting up an OTA Provider.
-
-### Reverting to a compressed internal secondary
-
-When the Silabs MCUboot fork gains an LZMA decompression engine, drop the
-external SPI dependency:
-
-1.  **Overlay** (`boards/xg24_rb4187c.overlay`): remove the `&mx25r80`
-    `slot1_partition` and restore an internal compressed `slot1_partition`
-    (smaller than `slot0`); shrink `slot0` accordingly.
-2.  **Bootloader** (`config/silabs/app/bootloader.conf`): add
-    `CONFIG_BOOT_DECOMPRESSION=y` (keep `CONFIG_BOOT_UPGRADE_ONLY=y`); the SPI
-    driver configs can be dropped.
-3.  **App** (`boards/xg24_rb4187c_ota.conf`): the `CONFIG_SPI*`/`CONFIG_SPI_NOR`
-    drivers and `CONFIG_MCUBOOT_IMGTOOL_OVERWRITE_ONLY` can be dropped.
-4.  **Signing / post-build**: sign with `--compression lzma2armthumb`.
-5.  **Image processor**: no change needed — `PARTITION_DEVICE(slot1_partition)`
-    resolves back to internal `flash0`.
+provider setup.
 
 ## Limitations
 

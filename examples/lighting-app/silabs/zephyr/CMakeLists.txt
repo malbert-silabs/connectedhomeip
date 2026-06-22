@@ -18,7 +18,6 @@ cmake_minimum_required(VERSION 3.20)
 get_filename_component(CHIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/connectedhomeip REALPATH)
 get_filename_component(GEN_DIR ${CHIP_ROOT}/zzz_generated/ REALPATH)
 get_filename_component(ZEPHYR_PLATFORM_COMMON ${CHIP_ROOT}/examples/platform/silabs/zephyr REALPATH)
-get_filename_component(EXAMPLE_PLATFORM_SILABS_COMMON_DIR ${CHIP_ROOT}/examples/platform/silabs/zephyr REALPATH)
 get_filename_component(SILABS_LIGHTING_COMMON ${CHIP_ROOT}/examples/lighting-app/silabs REALPATH)
 get_filename_component(ALL_CLUSTERS_COMMON_DIR ${CHIP_ROOT}/examples/all-clusters-app/all-clusters-common REALPATH)
 
@@ -62,11 +61,11 @@ target_sources(app
 
 if(CONFIG_CHIP_OTA_REQUESTOR)
     target_sources(app PRIVATE
-                    ${EXAMPLE_PLATFORM_SILABS_COMMON_DIR}/ota_requestor/source/OTARequestorInitiatorCommon.cpp
-                    ${EXAMPLE_PLATFORM_SILABS_COMMON_DIR}/ota_requestor/source/OTARequestorInitiatorZephyr.cpp
+                    ${ZEPHYR_PLATFORM_COMMON}/ota_requestor/source/OTARequestorInitiatorCommon.cpp
+                    ${ZEPHYR_PLATFORM_COMMON}/ota_requestor/source/OTARequestorInitiatorZephyr.cpp
     )
     target_include_directories(app PRIVATE
-                    ${EXAMPLE_PLATFORM_SILABS_COMMON_DIR}/ota_requestor/include/
+                    ${ZEPHYR_PLATFORM_COMMON}/ota_requestor/include/
     )
 endif()
 
