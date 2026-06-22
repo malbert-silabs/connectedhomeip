@@ -300,7 +300,7 @@ the Silabs FreeRTOS examples.
     `slot0` and `slot1` are **1024 kB**. The signed application must stay under
     1024 kB (~978 kB today). The 8 kB internal page vs 4 kB external sector
     difference is fine because 8 is a multiple of 4.
--   `prj_ota.conf` enables the SPI stack (`CONFIG_SPI`,
+-   `boards/xg24_rb4187c_ota.conf` enables the SPI stack (`CONFIG_SPI`,
     `CONFIG_SPI_SILABS_EUSART`, `CONFIG_SPI_NOR`) so the application can stream
     the download into the external NOR, and `config/silabs/app/bootloader.conf`
     enables the same drivers plus `CONFIG_BOOT_UPGRADE_ONLY=y` so MCUboot can
@@ -341,15 +341,20 @@ Internal flash (1536 kB)            External MX25R SPI NOR
 
 ```bash
 west build -b xg24_rb4187c -p always connectedhomeip/examples/lighting-app/silabs/zephyr \
-    -- -DEXTRA_CONF_FILE=prj_ota.conf
+    -- -DFILE_SUFFIX=ota
 ```
+
+`-DFILE_SUFFIX=ota` selects `prj_ota.conf` (board-agnostic OTA options) and, for
+this board only, auto-merges `boards/xg24_rb4187c_ota.conf` (the external-SPI
+drivers and overwrite-only padding that the layout above requires). Other boards
+have no `_ota` fragment, so those settings stay out of their OTA builds.
 
 Build the **update** image with a higher software version so the provider offers
 it as newer:
 
 ```bash
 west build -b xg24_rb4187c -p always connectedhomeip/examples/lighting-app/silabs/zephyr \
-    -- -DEXTRA_CONF_FILE=prj_ota.conf \
+    -- -DFILE_SUFFIX=ota \
        -DCONFIG_CHIP_DEVICE_SOFTWARE_VERSION=2 \
        -DCONFIG_CHIP_DEVICE_SOFTWARE_VERSION_STRING=\"2.0\"
 ```
@@ -399,8 +404,8 @@ external SPI dependency:
 2.  **Bootloader** (`config/silabs/app/bootloader.conf`): add
     `CONFIG_BOOT_DECOMPRESSION=y` (keep `CONFIG_BOOT_UPGRADE_ONLY=y`); the SPI
     driver configs can be dropped.
-3.  **App** (`prj_ota.conf`): the `CONFIG_SPI*`/`CONFIG_SPI_NOR` drivers can be
-    dropped.
+3.  **App** (`boards/xg24_rb4187c_ota.conf`): the `CONFIG_SPI*`/`CONFIG_SPI_NOR`
+    drivers and `CONFIG_MCUBOOT_IMGTOOL_OVERWRITE_ONLY` can be dropped.
 4.  **Signing / post-build**: sign with `--compression lzma2armthumb`.
 5.  **Image processor**: no change needed — `PARTITION_DEVICE(slot1_partition)`
     resolves back to internal `flash0`.

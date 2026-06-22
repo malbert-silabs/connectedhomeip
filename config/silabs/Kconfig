@@ -29,9 +29,9 @@ config CHIP_OTA_REQUESTOR
 	bool "Enable OTA Requestor"
 	default n
 	# The generic Zephyr OTA image processor (src/platform/Zephyr/OTAImageProcessorImpl)
-	# performs single-application-image OTA: it streams the downloaded image into the
-	# MCUboot secondary slot and requests a swap. It does not use the multi-image DFU
-	# subsystem (DFU_MULTI_IMAGE / DFU_TARGET).
+	# streams the downloaded image into the MCUboot secondary slot and requests an
+	# install. It does not use the multi-image DFU subsystem (DFU_MULTI_IMAGE /
+	# DFU_TARGET).
 	imply BOOTLOADER_MCUBOOT
 	imply IMG_MANAGER
 	imply STREAM_FLASH

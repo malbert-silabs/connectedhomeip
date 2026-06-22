@@ -16,24 +16,22 @@
 
 
 
-&flash0 {
-    partitions {
-        factory_partition: partition@15c000 {
-                reg = <0x0015c000 DT_SIZE_K(32)>;
-        };
-        settings_partition: partition@164000 {
-                reg = <0x00164000 DT_SIZE_K(32)>;
-        };
-    };
-};
-
+/*
+ * slot0 must match slot1 in size for MCUboot's boot_slots_compatible()
+ * check to pass in overwrite-only mode.
+ */
 &slot0_partition {
     reg = <0x0000c000 DT_SIZE_K(1024)>;
 };
 
-/* The board defines slot1 on internal flash0; remove it and recreate it on the
- * external SPI NOR below. storage_partition keeps its board-default location
- * (0x178000) so its node name still matches its reg base. */
+&flash0 {
+    partitions {
+        factory_partition: partition@10c000 {
+                reg = <0x0010c000 DT_SIZE_K(32)>;
+        };
+    };
+};
+
 /delete-node/ &slot1_partition;
 
 &mx25r80 {
