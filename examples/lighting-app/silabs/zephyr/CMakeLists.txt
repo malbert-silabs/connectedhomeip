@@ -94,6 +94,4 @@ if(CONFIG_CHIP_LIB_SHELL)
     )
 endif()
 
-# Build MCUboot, merge it with the signed application, and generate the
-# Matter OTA image (matter.ota) when the OTA Requestor is enabled.
 include(${CHIP_ROOT}/config/silabs/app/zephyr-post-build.cmake)

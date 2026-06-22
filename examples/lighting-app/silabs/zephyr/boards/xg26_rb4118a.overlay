@@ -14,29 +14,6 @@
  *    limitations under the License.
  */
 
-/*
- * All-internal A/B layout for the PG26 Explorer Kit (3200 KiB on-chip flash, no
- * external SPI NOR). Both image slots live in internal flash and are equal in
- * size, so MCUboot can run a true A/B upgrade (swap or direct-xip) where each
- * slot holds a runnable image -- not overwrite-only staging. Keep the bootloader
- * out of overwrite-only mode (e.g. CONFIG_BOOT_SWAP_USING_MOVE=y, or
- * CONFIG_BOOT_DIRECT_XIP=y) and pad signed images for swap
- * (CONFIG_MCUBOOT_IMGTOOL_OVERWRITE_ONLY=n).
- *
- * Matter KVS uses the Zephyr settings subsystem, whose NVS/ZMS backend lives in
- * the base board's "storage_partition"; factory_partition holds provisioned
- * factory data (FIXED_PARTITION_OFFSET(factory_partition), enabled with
- * CONFIG_CHIP_FACTORY_DATA).
- *
- * Layout (offsets from flash0 base, 8 KiB erase sectors):
- *   boot      0x000000  48 KiB
- *   slot0     0x00c000  1544 KiB   (primary, code-partition)
- *   slot1     0x18e000  1544 KiB   (secondary, must match slot0 for swap)
- *   factory   0x310000  32 KiB
- *   storage   0x318000  32 KiB     (kept from base board DTS, used for KVS)
- *   total                3200 KiB
- */
-
 &slot0_partition {
     reg = <0x0000c000 DT_SIZE_K(1544)>;
 };

@@ -28,10 +28,6 @@ config CHIP_DEVICE_VENDOR_NAME
 config CHIP_OTA_REQUESTOR
 	bool "Enable OTA Requestor"
 	default n
-	# The generic Zephyr OTA image processor (src/platform/Zephyr/OTAImageProcessorImpl)
-	# streams the downloaded image into the MCUboot secondary slot and requests an
-	# install. It does not use the multi-image DFU subsystem (DFU_MULTI_IMAGE /
-	# DFU_TARGET).
 	imply BOOTLOADER_MCUBOOT
 	imply IMG_MANAGER
 	imply STREAM_FLASH
@@ -478,9 +474,6 @@ config BT_GATT_CACHING
 config BOOT_IMAGE_ACCESS_HOOKS
     default n 
 
-# Matter performs single-application-image OTA, so MCUboot manages a single
-# updateable image (two slots: slot0/slot1). A value of 2 would make MCUboot
-# expect slot2/slot3 partitions, which are not defined in the device tree.
 config UPDATEABLE_IMAGE_NUMBER
     default 1
 
