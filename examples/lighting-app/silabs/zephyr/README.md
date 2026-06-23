@@ -271,31 +271,12 @@ CONFIG_NVS_LOOKUP_CACHE_SIZE=1024
 
 This example supports Matter Over-The-Air (OTA) software updates via the generic
 Zephyr image processor (`src/platform/Zephyr/OTAImageProcessorImpl`) and MCUboot.
-The downloaded image is streamed into the MCUboot secondary slot
-(`slot1_partition`) and installed on the next reboot (overwrite-only). This is
-the portable Zephyr mechanism, distinct from the Gecko Bootloader / GBL flow used
-by the Silabs FreeRTOS examples.
 
-Enabling `CONFIG_CHIP_OTA_REQUESTOR` implies `CONFIG_BOOTLOADER_MCUBOOT` and uses
-a single application image (`CONFIG_UPDATEABLE_IMAGE_NUMBER=1`). The image
-processor resolves the flash device from `slot1_partition` itself, so the
-secondary slot can live wherever a board has room:
-
--   `xg24_rb4187c`: the onboard **MX25R external SPI NOR**. Two full images do
-    not fit in the EFR32MG24's 1536 kB internal flash, and the Silabs MCUboot
-    fork has no LZMA decompressor yet, so the secondary is external and MCUboot
-    overwrite-copies it into the internal primary. The board's `.conf` enables
-    the SPI NOR drivers; primary and secondary are both 1024 kB (MCUboot requires
-    equal-sized slots), so the signed app must stay under 1024 kB.
--   `xg26_rb4118a`: internal flash.
+Enabling `CONFIG_CHIP_OTA_REQUESTOR` implies `CONFIG_BOOTLOADER_MCUBOOT`.
 
 The app is signed with the MCUboot ECDSA-P256 development key
 (`CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`, set in `config/silabs/Kconfig`); replace it
-with a private key for production. `config/silabs/app/bootloader.conf` sets
-`CONFIG_BOOT_BUILTIN_KEY=n` so the public key is embedded in the bootloader;
-otherwise the Silabs HSE PSA driver defaults to a built-in key that must first be
-provisioned into Secure Vault, and every image is rejected with `Image in the
-primary slot is not valid!`.
+with a private key for production.
 
 ### Build
 
@@ -304,8 +285,8 @@ west build -b xg24_rb4187c -p always examples/lighting-app/silabs/zephyr \
     -- -DCONFIG_CHIP_OTA_REQUESTOR=y -DCONFIG_CHIP_OTA_IMAGE_BUILD=y
 ```
 
-Build the **update** image with a higher software version so the provider offers
-it as newer:
+Build the update image with a higher software version so the provider offers
+it as newer version:
 
 ```bash
 west build -b xg24_rb4187c -p always examples/lighting-app/silabs/zephyr \
@@ -322,31 +303,50 @@ Outputs in `build/zephyr/` (produced by `config/silabs/app/zephyr-post-build.cma
 
 ### Flash the base image
 
+Use the following commander command to flash the app and bootloader.
+
 ```bash
 commander flash ./build/zephyr/zephyr_full.bin --address 0x8000000
 ```
 
 ### Run an update
 
-1.  Flash the base (v1) image and commission the device.
-2.  Serve the candidate (v2) image:
+The following commands are provided as examples using a [Silicon Labs Matter Hub image.](https://docs.silabs.com/matter/latest/matter-thread/raspi-img) Refer to the [Matter OTA guide](../../../../docs/guides/ota_software_update.md) for detailed instructions on setting up an OTA Provider.
 
-    ```bash
-    ./chip-ota-provider-app --filepath build/zephyr/matter.ota
-    ```
+1. Flash the base (v1) image and commission the device.
+2. Serve the candidate (v2) image with `chip-ota-provider-app`
+```bash
+./chip-ota-provider-app \
+    --KVS /tmp/chip_kvs_provider \
+    --filepath /tmp/lighting-v2.ota \
+    --discriminator 1111 \
+    --passcode 123456789 \
+    --secured-device-port 5541 \
+    -q updateAvailable
 
-3.  Announce the provider to the device with `chip-tool`:
+```
+3. Commission the OTA provider and update ACLs
+```bash
+PROVIDER_NODE_ID=1
+LIGHT_NODE_ID=<your-lighting-app-node-id>
 
-    ```bash
-    chip-tool pairing onnetwork 1 20202021
-    chip-tool otasoftwareupdaterequestor announce-otaprovider 1 0 0 0 <requestor-node-id> 0
-    ```
+mattertool pairing onnetwork ${PROVIDER_NODE_ID} 123456789
 
-The image downloads into `slot1_partition`, `boot_request_upgrade()` schedules
-the install, the device reboots, MCUboot installs the v2 image, and it confirms
-itself via `boot_write_img_confirmed()`. See the
-[Matter OTA guide](../../../../docs/guides/ota_software_update.md) for full
-provider setup.
+mattertool accesscontrol write acl \
+    '[{"fabricIndex":1,"privilege":5,"authMode":2,"subjects":[112233],"targets":null},{"fabricIndex":1,"privilege":3,"authMode":2,"subjects":null,"targets":[{"cluster":41,"endpoint":null,"deviceType":null}]}]' \
+    ${PROVIDER_NODE_ID} 0
+
+```
+3. Announce the provider to the device with `chip-tool`
+```bash
+mattertool otasoftwareupdaterequestor announce-otaprovider \
+    ${PROVIDER_NODE_ID} 0 0 0 ${LIGHT_NODE_ID} 0
+```
+4. Device will download and apply the OTA.
+5. Verify the OTA was applied
+```bash
+mattertool basicinformation read software-version ${LIGHT_NODE_ID} 0
+```
 
 ## Limitations
 
