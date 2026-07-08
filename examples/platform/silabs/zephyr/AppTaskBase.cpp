@@ -41,6 +41,14 @@
 #include <platform/DeviceInstanceInfoProvider.h>
 #include <platform/Zephyr/DeviceInstanceInfoProviderImpl.h>
 
+#if CONFIG_CHIP_FACTORY_DATA
+#if CONFIG_CHIP_SILABS_SECURE_VAULT_DAC
+#include <platform/silabs/zephyr/SilabsFactoryDataProvider.h>
+#else
+#include <headers/ProvisionStorage.h>
+#endif // CONFIG_CHIP_SILABS_SECURE_VAULT_DAC
+#endif // CONFIG_CHIP_FACTORY_DATA
+
 #if CONFIG_NET_L2_OPENTHREAD
 #include <inet/EndPointStateOpenThread.h>
 #include <lib/support/ThreadOperationalDataset.h>
@@ -450,17 +458,22 @@ void chip::Zephyr::App::AppTaskBase::PrintCurrentVersion()
 CHIP_ERROR chip::Zephyr::App::AppTaskBase::InitFactoryDataProvider(void)
 {
 #if CONFIG_CHIP_FACTORY_DATA
-#if CONFIG_CHIP_ENCRYPTED_FACTORY_DATA
-    FactoryDataPrvdImpl().SetEncryptionMode(FactoryDataProvider::encrypt_ecb);
-    FactoryDataPrvdImpl().SetAes128Key(&aes128TestKey[0]);
-#endif /* CONFIG_CHIP_ENCRYPTED_FACTORY_DATA */
-    ReturnErrorOnFailure(FactoryDataPrvdImpl().Init());
-    SetDeviceInstanceInfoProvider(&FactoryDataPrvd());
-    SetDeviceAttestationCredentialsProvider(&FactoryDataPrvd());
-    SetCommissionableDataProvider(&FactoryDataPrvd());
+#if CONFIG_CHIP_SILABS_SECURE_VAULT_DAC
+    static Silabs::Provision::SilabsFactoryDataProvider sProvider;
+    ReturnErrorOnFailure(sProvider.Init());
+    SetDeviceInstanceInfoProvider(&sProvider);
+    SetDeviceAttestationCredentialsProvider(&sProvider);
+    SetCommissionableDataProvider(&sProvider);
+#else
+    static Silabs::Provision::Storage sProvider;
+    ReturnErrorOnFailure(sProvider.Initialize());
+    SetDeviceInstanceInfoProvider(&sProvider);
+    SetDeviceAttestationCredentialsProvider(&sProvider);
+    SetCommissionableDataProvider(&sProvider);
+#endif // CONFIG_CHIP_SILABS_SECURE_VAULT_DAC
 #else
     SetDeviceInstanceInfoProvider(&DeviceInstanceInfoProviderMgrImpl());
     SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
-#endif /* CONFIG_CHIP_FACTORY_DATA */
+#endif // CONFIG_CHIP_FACTORY_DATA
     return CHIP_NO_ERROR;
 }

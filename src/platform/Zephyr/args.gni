@@ -2,4 +2,5 @@ chip_device_platform = "zephyr"
 
 declare_args() {
   chip_malloc_sys_heap = false
+  chip_enable_factory_data = false
 }

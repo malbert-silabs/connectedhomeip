@@ -15,7 +15,13 @@
  *    limitations under the License.
  */
 #include <algorithm>
-#include <credentials/examples/DeviceAttestationCredsExample.h>
+// credentials:credentials depends on src/platform, so it cannot be a dep of the
+// Zephyr factory_data target (would cycle). The symbol is linked into the final
+// image; only used under SL_MATTER_ENABLE_EXAMPLE_CREDENTIALS.
+#include <credentials/examples/DeviceAttestationCredsExample.h> // nogncheck
+#if defined(__ZEPHYR__)
+#include <platform/CHIPDeviceError.h> // nogncheck
+#endif // __ZEPHYR__
 #include <headers/AttestationKey.h>
 #include <headers/ProvisionEncoder.h>
 #include <headers/ProvisionStorage.h>
@@ -24,14 +30,16 @@
 #include <lib/support/CHIPMemString.h>
 #include <lib/support/CodeUtils.h>
 #include <platform/CHIPDeviceConfig.h>
+#if !defined(__ZEPHYR__)
 #include <platform/silabs/SilabsConfig.h>
+#endif // !__ZEPHYR__
 #include <string.h>
 #ifndef NDEBUG
 #if defined(SL_MATTER_TEST_EVENT_TRIGGER_ENABLED) && (SL_MATTER_GN_BUILD == 0)
 #include <sl_matter_test_event_trigger_config.h>
 #endif // defined(SL_MATTER_TEST_EVENT_TRIGGER_ENABLED) && (SL_MATTER_GN_BUILD == 0)
 #endif // NDEBUG
-#if defined(SL_MATTER_ENABLE_OTA_ENCRYPTION) && SL_MATTER_ENABLE_OTA_ENCRYPTION
+#if defined(SL_MATTER_ENABLE_OTA_ENCRYPTION) && SL_MATTER_ENABLE_OTA_ENCRYPTION && !defined(__ZEPHYR__)
 #include <platform/silabs/multi-ota/OtaTlvEncryptionKey.h>
 #endif // SL_MATTER_ENABLE_OTA_ENCRYPTION
 
@@ -43,7 +51,16 @@
 
 using namespace chip::Credentials;
 
-#if SLI_SI91X_MCU_INTERFACE
+#if defined(__ZEPHYR__)
+
+#include <zephyr/devicetree.h>
+#include <zephyr/storage/flash_map.h>
+
+#if !DT_NODE_HAS_STATUS(DT_NODELABEL(factory_partition), okay)
+#error "factory_partition devicetree node is required when CHIP factory data is enabled"
+#endif
+
+#elif SLI_SI91X_MCU_INTERFACE
 // TODO: Remove this once the flash header integrates these definitions
 #define FLASH_ERASE 1 // flash_sector_erase_enable value for erase operation
 #define FLASH_WRITE 0 // flash_sector_erase_enable value for write operation
@@ -62,10 +79,27 @@ extern "C" {
 #else // SLI_SI91X_MCU_INTERFACE
 #include <em_msc.h>
 extern uint8_t linker_nvm_end[];
-#endif // SLI_SI91X_MCU_INTERFACE
+#endif // __ZEPHYR__ / SLI_SI91X_MCU_INTERFACE
 
 namespace {
-constexpr size_t kPageSize           = FLASH_PAGE_SIZE;
+#if defined(__ZEPHYR__)
+// Factory data uses a single flash erase block at the start of factory_partition.
+#if defined(CONFIG_SOC_SERIES_EFR32MG24) || defined(CONFIG_SOC_SERIES_EFR32MG26) || defined(CONFIG_SOC_SERIES_EFR32MG21)
+constexpr size_t kPageSize = 8192;
+#elif defined(CONFIG_BOARD_SIWX917_RB4338A) || defined(CONFIG_BOARD_SIWX917_RB4342A)
+constexpr size_t kPageSize = 4096;
+#else
+constexpr size_t kPageSize = PARTITION_SIZE(factory_partition);
+#endif
+
+static_assert(kPageSize <= PARTITION_SIZE(factory_partition),
+              "factory_partition must be at least one erase block");
+
+static const struct flash_area * sFactoryPartition = nullptr;
+#else
+constexpr size_t kPageSize = FLASH_PAGE_SIZE;
+#endif // __ZEPHYR__
+
 constexpr size_t kMaxBinaryValue     = 1024;
 constexpr size_t kArgumentBufferSize = 2 * sizeof(uint16_t) + kMaxBinaryValue; // ID(2) + Size(2) + Value(n)
 } // namespace
@@ -76,13 +110,19 @@ namespace Silabs {
 namespace Provision {
 namespace Flash {
 
+#if !defined(__ZEPHYR__)
 #if SLI_SI91X_MCU_INTERFACE
 static uint8_t * sReadOnlyPage = reinterpret_cast<uint8_t *>(NWP_FLASH_ADDRESS);
 #else
 static uint8_t * sReadOnlyPage = reinterpret_cast<uint8_t *>(linker_nvm_end);
 #endif // SLI_SI91X_MCU_INTERFACE
+#endif // !__ZEPHYR__
 uint8_t sTemporaryPage[kPageSize] = { 0 };
-uint8_t * sActivePage             = sReadOnlyPage;
+#if defined(__ZEPHYR__)
+uint8_t * sActivePage = sTemporaryPage;
+#else
+uint8_t * sActivePage = sReadOnlyPage;
+#endif // __ZEPHYR__
 
 CHIP_ERROR DecodeTotal(Encoding::Buffer & reader, uint16_t & total)
 {
@@ -96,7 +136,9 @@ CHIP_ERROR DecodeTotal(Encoding::Buffer & reader, uint16_t & total)
 
 CHIP_ERROR ActivateWrite(uint8_t *& active)
 {
-#if !(SLI_SI91X_MCU_INTERFACE)
+#if defined(__ZEPHYR__) || SLI_SI91X_MCU_INTERFACE
+    active = sActivePage = sTemporaryPage;
+#else
     if (sActivePage == sReadOnlyPage)
     {
         memcpy(sTemporaryPage, sReadOnlyPage, sizeof(sTemporaryPage));
@@ -273,7 +315,21 @@ CHIP_ERROR Get(uint16_t id, char * value, size_t max_size, size_t & size)
 
 CHIP_ERROR Storage::Initialize(uint32_t flash_addr, uint32_t flash_size)
 {
-#if SLI_SI91X_MCU_INTERFACE
+#if defined(__ZEPHYR__)
+    (void) flash_addr;
+    (void) flash_size;
+
+    if (sFactoryPartition == nullptr)
+    {
+        int rc = flash_area_open(PARTITION_ID(factory_partition), &sFactoryPartition);
+        VerifyOrReturnError(rc == 0, CHIP_ERROR_PERSISTED_STORAGE_FAILED);
+    }
+
+    int rc = flash_area_read(sFactoryPartition, 0, Flash::sTemporaryPage, kPageSize);
+    VerifyOrReturnError(rc == 0, CHIP_ERROR_PERSISTED_STORAGE_FAILED);
+
+    Flash::sActivePage = Flash::sTemporaryPage;
+#elif SLI_SI91X_MCU_INTERFACE
     sl_status_t status = sl_si91x_command_to_read_common_flash((uint32_t) (Flash::sReadOnlyPage), sizeof(Flash::sTemporaryPage),
                                                                Flash::sTemporaryPage);
     VerifyOrReturnError(status == SL_STATUS_OK, CHIP_ERROR_INVALID_ARGUMENT);
@@ -292,6 +348,9 @@ CHIP_ERROR Storage::Initialize(uint32_t flash_addr, uint32_t flash_size)
 
 CHIP_ERROR Storage::Commit()
 {
+#if defined(__ZEPHYR__)
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+#else
     if (Flash::sActivePage == Flash::sTemporaryPage)
     {
 #if SLI_SI91X_MCU_INTERFACE
@@ -310,6 +369,7 @@ CHIP_ERROR Storage::Commit()
         MSC_WriteWord((uint32_t *) Flash::sReadOnlyPage, Flash::sTemporaryPage, kPageSize);
 #endif // SLI_SI91X_MCU_INTERFACE
     }
+#endif // __ZEPHYR__
     return CHIP_NO_ERROR;
 }
 
@@ -695,14 +755,29 @@ CHIP_ERROR Storage::SignWithDeviceAttestationKey(const ByteSpan & message, Mutab
 
 CHIP_ERROR Storage::SetCredentialsBaseAddress(uint32_t addr)
 {
+#if defined(__ZEPHYR__)
+    (void) addr;
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+#else
     Flash::sReadOnlyPage = (uint8_t *) addr;
     return CHIP_NO_ERROR;
+#endif
 }
 
 CHIP_ERROR Storage::GetCredentialsBaseAddress(uint32_t & addr)
 {
+#if defined(__ZEPHYR__)
+    if (sFactoryPartition == nullptr)
+    {
+        return CHIP_ERROR_INCORRECT_STATE;
+    }
+
+    addr = sFactoryPartition->fa_off;
+    return CHIP_NO_ERROR;
+#else
     addr = (uint32_t) Flash::sReadOnlyPage;
     return CHIP_NO_ERROR;
+#endif
 }
 
 CHIP_ERROR Storage::SetProvisionVersion(const char * value, size_t size)
@@ -715,6 +790,24 @@ CHIP_ERROR Storage::GetProvisionVersion(char * value, size_t max, size_t & size)
     return Flash::Get(Parameters::ID::kVersion, value, max, size);
 }
 
+#if defined(__ZEPHYR__)
+// The setup payload (QR code) only feeds an LCD, which Zephyr builds lack.
+// Storage is stubbed; the symbols stay for the prebuilt provisioning library.
+CHIP_ERROR Storage::SetSetupPayload(const uint8_t * value, size_t size)
+{
+    (void) value;
+    (void) size;
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+}
+
+CHIP_ERROR Storage::GetSetupPayload(uint8_t * value, size_t max, size_t & size)
+{
+    (void) value;
+    (void) max;
+    (void) size;
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+}
+#else
 CHIP_ERROR Storage::SetSetupPayload(const uint8_t * value, size_t size)
 {
     return Flash::Set(Parameters::ID::kSetupPayload, value, size);
@@ -724,6 +817,7 @@ CHIP_ERROR Storage::GetSetupPayload(uint8_t * value, size_t max, size_t & size)
 {
     return Flash::Get(Parameters::ID::kSetupPayload, value, max, size);
 }
+#endif // __ZEPHYR__
 
 CHIP_ERROR Storage::SetProvisionRequest(bool value)
 {
@@ -737,7 +831,7 @@ CHIP_ERROR Storage::GetProvisionRequest(bool & value)
     return CHIP_ERROR_NOT_IMPLEMENTED;
 }
 
-#if defined(SL_MATTER_ENABLE_OTA_ENCRYPTION) && SL_MATTER_ENABLE_OTA_ENCRYPTION
+#if defined(SL_MATTER_ENABLE_OTA_ENCRYPTION) && SL_MATTER_ENABLE_OTA_ENCRYPTION && !defined(__ZEPHYR__)
 CHIP_ERROR Storage::SetOtaTlvEncryptionKey(const ByteSpan & value)
 {
 #if defined(SL_MBEDTLS_USE_TINYCRYPT)

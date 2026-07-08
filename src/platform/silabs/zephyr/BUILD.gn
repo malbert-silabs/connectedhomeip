@@ -1,0 +1,76 @@
+# Copyright (c) 2026 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/chip.gni")
+
+import("${chip_root}/third_party/silabs/matter_support/provision/args.gni")
+
+declare_args() {
+  # Prebuilt provisioning library to link. matter_provisioning is a private
+  # repo, so the generic provisioning code (encoder, attestation key, generic
+  # storage dispatch) ships as a static lib selected by the Zephyr CMake layer.
+  chip_silabs_provision_lib = ""
+
+  # Mirrors CONFIG_CHIP_SILABS_SECURE_VAULT_DAC.
+  chip_silabs_secure_vault_dac = false
+}
+
+# ProvisionStorageFlash.cpp (Zephyr flash_map backend via __ZEPHYR__) and custom-id
+# storage are built from source; everything generic comes from
+# chip_silabs_provision_lib. The runtime provisioning Manager/Channel/Protocol
+# are omitted (data is flashed at manufacture into factory_partition).
+_provision_sources = [
+  "${chip_root}/examples/platform/silabs/provision/ProvisionStorageFlash.cpp",
+  "${chip_root}/examples/platform/silabs/provision/ProvisionStorageCustom.cpp",
+]
+
+if (chip_silabs_secure_vault_dac) {
+  _provision_sources += [ "SilabsFactoryDataProvider.cpp" ]
+}
+
+assert(chip_silabs_provision_lib != "",
+       "chip_silabs_provision_lib must point to a prebuilt provisioning library")
+
+# Vendored provisioning sources/headers are not -Wshadow/-Wconversion clean.
+# This must be a config (appended to configs) so the suppressions are emitted
+# after the default compiler config that enables -Wshadow/-Werror.
+config("provision_warnings") {
+  cflags = [
+    "-Wno-shadow",
+    "-Wno-conversion",
+  ]
+}
+
+source_set("factory_data") {
+  sources = _provision_sources
+
+  libs = [ chip_silabs_provision_lib ]
+
+  defines = [
+    "SL_MATTER_ENABLE_EXAMPLE_CREDENTIALS=1",
+    "SL_MATTER_GN_BUILD=1",
+  ]
+
+  public_deps = [
+    "${chip_root}/src/app:test-event-trigger",
+    "${sl_provision_root}:headers",
+  ]
+
+  # platform_base (not the src/lib umbrella) provides lib/core, lib/support and
+  # the src include config; depending on src/lib here would create a cycle since
+  # src/lib transitively depends back on the platform.
+  deps = [ "${chip_root}/src/platform:platform_base" ]
+
+  configs += [ ":provision_warnings" ]
+}

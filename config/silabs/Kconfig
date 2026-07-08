@@ -70,6 +70,29 @@ config CHIP_TASK_STACK_SIZE
 	help
 	  Configures the stack size available for the CHIP (Matter) thread.
 
+config CHIP_FACTORY_DATA
+	bool "Read factory data from factory_partition (Provision::Storage format)"
+	default n
+	help
+	  Reads device instance info, commissionable data, and attestation
+	  credentials from a dedicated factory_partition flash region using
+	  the Silabs Encoding::Version2 binary format. Compatible with the
+	  matter_provisioning host tooling used for FreeRTOS builds.
+	  The factory_partition survives factory reset.
+
+config CHIP_SILABS_SECURE_VAULT_DAC
+	bool "Use Silabs Secure Vault opaque key for DAC signing (no key in flash)"
+	default n
+	depends on CHIP_FACTORY_DATA
+	select MBEDTLS_X509_CSR_WRITE_C
+	select MBEDTLS_PEM_WRITE_C
+	help
+	  When enabled, the DAC private key is generated inside the EFR32
+	  Secure Vault and never written to flash. Signing uses the opaque
+	  PSA key handle directly. Requires CSR-based manufacturing flow.
+	  When disabled, a raw key stored in factory_partition under
+	  Parameters::ID::kDacKey is imported transiently into PSA/SE per sign.
+
 config CHIP_FACTORY_DATA_BUILD
 	bool "Generate factory data contents"
 	help
