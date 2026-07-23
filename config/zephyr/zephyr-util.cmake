@@ -34,6 +34,16 @@ function(zephyr_get_compile_flags VAR LANG)
     zephyr_get_system_include_directories_for_lang_as_string(${LANG} SYSTEM_INCLUDES)
     zephyr_get_compile_definitions_for_lang_as_string(${LANG} DEFINES)
     zephyr_get_compile_options_for_lang_as_string(${LANG} FLAGS)
+
+    # Zephyr sets CMAKE_*_COMPILER_TARGET for LLVM toolchains (e.g. Silabs SDK).
+    # GN invokes the compiler directly, so pass --target explicitly. Without it,
+    # Clang rejects GCC-style -mcpu= values such as cortex-m33.
+    if("${LANG}" STREQUAL "CXX" AND CMAKE_CXX_COMPILER_TARGET)
+        list(APPEND FLAGS --target=${CMAKE_CXX_COMPILER_TARGET})
+    elseif(CMAKE_C_COMPILER_TARGET)
+        list(APPEND FLAGS --target=${CMAKE_C_COMPILER_TARGET})
+    endif()
+
     set(${VAR} ${INCLUDES} ${SYSTEM_INCLUDES} ${DEFINES} ${FLAGS} ${${VAR}} PARENT_SCOPE)
 endfunction()
 

@@ -13,6 +13,7 @@ The same application can be built for either:
     -   [Introduction](#introduction)
     -   [Supported Hardware](#supported-hardware)
     -   [Building](#building)
+        -   [Building with LLVM/Clang](LLVM_BUILD.md)
     -   [Flashing the Application](#flashing-the-application)
     -   [Running the Complete Example](#running-the-complete-example)
         -   [Commissioning over BLE](#commissioning-over-ble)
@@ -125,6 +126,13 @@ SoC and the network transport used by Matter.
     ```
 
     where `<board>` is `siwx917_rb4338a` or `xg24_rb4187c`.
+
+### Building with LLVM/Clang
+
+The Silicon Labs Zephyr SDK also ships an LLVM/Clang toolchain. That path needs
+extra patches in the Matter SDK and Zephyr tree; see
+[LLVM_BUILD.md](LLVM_BUILD.md) for the full change list, build command, and known
+remaining warnings.
 
 ## Flashing the Application
 
