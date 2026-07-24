@@ -199,6 +199,98 @@ To silence the OpenThread/PSA flexible-array warnings, you could additionally ad
 
 ---
 
+## Avoiding silabs_zephyr changes #1 and #2 (connectedhomeip-only fixes)
+
+`examples/lighting-app/silabs/zephyr/CMakeLists.txt` implements silabs_zephyr
+changes #1 and #2 (and the optional `-Wno-c99-extensions` suggestion below)
+entirely from `connectedhomeip`, right after `find_package(Zephyr)`, instead of
+patching the vendored OpenThread/Mbed TLS/Zephyr CMake files. If you'd rather
+patch those files directly, the snippets below can be removed and replaced
+with the corresponding silabs_zephyr changes documented above.
+
+### print-ot-config (OpenThread)
+
+Instead of guarding `print-ot-config` in the vendored
+`modules/lib/openthread/CMakeLists.txt`, the same symptom can be worked around
+by stripping the CXX-only entries from `ot-config`'s
+`INTERFACE_COMPILE_DEFINITIONS`:
+
+```cmake
+if(CONFIG_OPENTHREAD AND TARGET ot-config AND TARGET zephyr_interface)
+    get_target_property(OT_CONFIG_DEFS ot-config INTERFACE_COMPILE_DEFINITIONS)
+    if(OT_CONFIG_DEFS)
+        list(FILTER OT_CONFIG_DEFS EXCLUDE REGEX "TARGET_PROPERTY:zephyr_interface,INTERFACE_COMPILE_DEFINITIONS")
+    endif()
+    get_target_property(ZEPHYR_INTERFACE_DEFS zephyr_interface INTERFACE_COMPILE_DEFINITIONS)
+    if(ZEPHYR_INTERFACE_DEFS)
+        list(FILTER ZEPHYR_INTERFACE_DEFS EXCLUDE REGEX "COMPILE_LANGUAGE:CXX")
+    endif()
+    set_target_properties(ot-config PROPERTIES
+        INTERFACE_COMPILE_DEFINITIONS "${OT_CONFIG_DEFS};${ZEPHYR_INTERFACE_DEFS}")
+endif()
+```
+
+This relies on the Generate step running strictly after all of `Configure`
+(including the app's own `CMakeLists.txt`), so `ot-config`'s property can still
+be rewritten here even though the OpenThread module set it earlier.
+
+`ot-config`'s `INTERFACE_COMPILE_DEFINITIONS` at this point is `PACKAGE_NAME`,
+`PACKAGE_VERSION`, `MBEDTLS_SSL_EXPORT_KEYS`, etc. (set by OpenThread's own
+CMakeLists.txt) followed by a single list entry that is the literal string
+`$<TARGET_PROPERTY:zephyr_interface,INTERFACE_COMPILE_DEFINITIONS>` (set by
+`zephyr/modules/openthread/CMakeLists.txt`). **Do not overwrite the whole
+property** — an earlier version of this workaround replaced it entirely with
+the filtered `zephyr_interface` list, which dropped `PACKAGE_NAME`/
+`PACKAGE_VERSION` and broke the OpenThread build with
+`error: use of undeclared identifier 'PACKAGE_NAME'` in `instance_api.cpp`.
+Only remove that one list entry and re-append a CXX-filtered copy of it.
+
+The only entries dropped from `zephyr_interface`'s list are the LLVM libc++
+macros (`_POSIX_C_SOURCE`, `_XOPEN_SOURCE`, `_GNU_SOURCE`) for OpenThread's own
+compilation units — OpenThread targets `OT_PLATFORM=zephyr`, not `posix`, so it
+should not depend on them, but verify this if OpenThread C++ sources start
+failing to compile with missing POSIX declarations.
+
+### Mbed TLS / TF-PSA-Crypto warnings
+
+Instead of setting `MBEDTLS_FATAL_WARNINGS OFF` and patching
+`zephyr/modules/mbedtls/CMakeLists.txt`, append the suppressions directly to
+the Mbed TLS/TF-PSA-Crypto library targets after `find_package(Zephyr)`
+(appending `-Wno-*` after the libraries' own `-Werror`/`-Wdocumentation` flags
+still suppresses them, regardless of order):
+
+```cmake
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    foreach(_mbedtls_lib mbedtls mbedx509 tfpsacrypto builtin p256-m everest pqcp extras platform utilities)
+        if(TARGET ${_mbedtls_lib})
+            target_compile_options(${_mbedtls_lib} PRIVATE -Wno-documentation -Wno-c99-extensions)
+        endif()
+    endforeach()
+endif()
+```
+
+### OpenThread `-Wc99-extensions` (non-fatal, but noisy)
+
+OpenThread's core also transitively includes the same Silicon Labs PSA driver
+headers (via `crypto/context_size.hpp`), so the same flexible-array-member
+warning shows up on its own libraries. This one is non-fatal, but can be
+silenced the same way:
+
+```cmake
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CONFIG_OPENTHREAD)
+    foreach(_ot_lib openthread-ftd openthread-mtd openthread-radio openthread-cli-ftd openthread-cli-mtd)
+        if(TARGET ${_ot_lib})
+            target_compile_options(${_ot_lib} PRIVATE -Wno-c99-extensions)
+        endif()
+    endforeach()
+endif()
+```
+
+(`openthread-cli-ftd`/`-mtd` include the same crypto headers transitively via
+`cli.hpp` → `instance.hpp`, so they need the suppression too.)
+
+---
+
 ## Upstreaming
 
 These patches are intended to be contributed upstream:
