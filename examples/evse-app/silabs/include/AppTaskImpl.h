@@ -58,6 +58,13 @@ public:
         CRTP_OPTIONAL_STATIC_DISPATCH(AppTaskImpl, Derived, EnergyManagementActionEventHandlerImpl, aEvent);
     }
 
+    // Matter stack callback after a server attribute change
+    void DMPostAttributeChangeCallback(const chip::app::ConcreteAttributePath & attributePath, uint8_t type, uint16_t size,
+                                       uint8_t * value)
+    {
+        CRTP_OPTIONAL_VOID_DISPATCH(AppTaskImpl, Derived, DMPostAttributeChangeCallbackImpl, attributePath, type, size, value);
+    }
+
 private:
     friend Derived;
 
@@ -71,4 +78,10 @@ private:
     void ButtonEventHandlerImpl(uint8_t button, uint8_t btnAction) { AppTask::ButtonEventHandler(button, btnAction); }
 
     void EnergyManagementActionEventHandlerImpl(AppEvent * aEvent) { AppTask::EnergyManagementActionEventHandler(aEvent); }
+
+    void DMPostAttributeChangeCallbackImpl(const chip::app::ConcreteAttributePath & attributePath, uint8_t type, uint16_t size,
+                                           uint8_t * value)
+    {
+        DMPostAttributeChangeCallback(attributePath, type, size, value);
+    }
 };
