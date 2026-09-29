@@ -73,6 +73,10 @@ static chip::DeviceLayer::Internal::Efr32PsaOperationalKeystore gOperationalKeys
 #include "SilabsTestEventTriggerDelegate.h" // nogncheck
 #endif
 
+#ifdef SL_MATTER_ENABLE_TIME_SYNC
+#include "SilabsTimeSyncDelegate.h" // nogncheck
+#endif
+
 #if CHIP_CONFIG_SYNCHRONOUS_REPORTS_ENABLED
 #include <app/reporting/SynchronizedReportSchedulerImpl.h>
 #else
@@ -374,6 +378,14 @@ CHIP_ERROR SilabsMatterConfig::InitMatter(const char * appName)
     // This is needed by localization configuration cluster so we set it before the initialization
     gExampleDeviceInfoProvider.SetStorageDelegate(initParams.persistentStorageDelegate);
     chip::DeviceLayer::SetDeviceInfoProvider(&gExampleDeviceInfoProvider);
+
+#ifdef SL_MATTER_ENABLE_TIME_SYNC
+    // Must happen before Server::Init so the cluster instance is constructed
+    // with this delegate rather than the SDK default one.
+    err = Silabs::SilabsTimeSyncDelegate::GetInstance().Init();
+    VerifyOrReturnError(err == CHIP_NO_ERROR, err,
+                        ChipLogError(DeviceLayer, "Failed to Init Time Sync delegate: %" CHIP_ERROR_FORMAT, err.Format()));
+#endif // SL_MATTER_ENABLE_TIME_SYNC
 
     // Init Matter Server and Start Event Loop
     err = chip::Server::GetInstance().Init(initParams);

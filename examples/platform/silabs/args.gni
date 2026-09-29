@@ -26,4 +26,10 @@ segger_rtt_buffer_size_down = 1024
 declare_args() {
   app_data_model = ""
   sl_matter_use_code_driven_dm = false
+
+  # Enable the Time Synchronization cluster TimeSyncClient (TSC) feature, which
+  # lets the device read time from a TrustedTimeSource node. Requires the
+  # cluster to be present on endpoint 0 in the application data model, and
+  # chip_enable_read_client to be enabled.
+  sl_matter_enable_time_sync = false
 }

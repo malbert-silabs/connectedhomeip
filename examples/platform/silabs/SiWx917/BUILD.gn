@@ -193,6 +193,10 @@ source_set("siwx917-common") {
     public_deps += [ "${silabs_common_plat_dir}/test-event-trigger:sources" ]
   }
 
+  if (sl_matter_enable_time_sync) {
+    public_deps += [ "${silabs_common_plat_dir}/time-sync:time-sync" ]
+  }
+
   if (sl_enable_si70xx_sensor) {
     sources += [
       "${silabs_common_plat_dir}/sensors/Si70xxSensor.h",

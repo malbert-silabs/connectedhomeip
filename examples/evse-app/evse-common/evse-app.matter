@@ -2889,15 +2889,19 @@ endpoint 0 {
   }
 
   server cluster TimeSynchronization {
+    emits event TimeFailure;
+    emits event MissingTrustedTimeSource;
     callback attribute UTCTime;
     callback attribute granularity;
+    callback attribute trustedTimeSource;
     callback attribute generatedCommandList;
     callback attribute acceptedCommandList;
     callback attribute attributeList;
-    ram      attribute featureMap default = 0;
+    ram      attribute featureMap default = 8;
     callback attribute clusterRevision;
 
     handle command SetUTCTime;
+    handle command SetTrustedTimeSource;
   }
 
   server cluster AdministratorCommissioning {

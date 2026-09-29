@@ -1856,6 +1856,14 @@
               "source": "client",
               "isIncoming": 1,
               "isEnabled": 1
+            },
+            {
+              "name": "SetTrustedTimeSource",
+              "code": 1,
+              "mfgCode": null,
+              "source": "client",
+              "isIncoming": 1,
+              "isEnabled": 1
             }
           ],
           "attributes": [
@@ -1886,6 +1894,22 @@
               "singleton": 0,
               "bounded": 0,
               "defaultValue": "",
+              "reportable": 1,
+              "minInterval": 1,
+              "maxInterval": 65534,
+              "reportableChange": 0
+            },
+            {
+              "name": "TrustedTimeSource",
+              "code": 3,
+              "mfgCode": null,
+              "side": "server",
+              "type": "TrustedTimeSourceStruct",
+              "included": 1,
+              "storageOption": "External",
+              "singleton": 0,
+              "bounded": 0,
+              "defaultValue": null,
               "reportable": 1,
               "minInterval": 1,
               "maxInterval": 65534,
@@ -1949,7 +1973,7 @@
               "storageOption": "RAM",
               "singleton": 0,
               "bounded": 0,
-              "defaultValue": "0",
+              "defaultValue": "8",
               "reportable": 1,
               "minInterval": 1,
               "maxInterval": 65534,
@@ -1970,6 +1994,22 @@
               "minInterval": 1,
               "maxInterval": 65534,
               "reportableChange": 0
+            }
+          ],
+          "events": [
+            {
+              "name": "TimeFailure",
+              "code": 3,
+              "mfgCode": null,
+              "side": "server",
+              "included": 1
+            },
+            {
+              "name": "MissingTrustedTimeSource",
+              "code": 4,
+              "mfgCode": null,
+              "side": "server",
+              "included": 1
             }
           ]
         },
